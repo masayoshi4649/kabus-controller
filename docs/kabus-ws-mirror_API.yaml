@@ -1,0 +1,244 @@
+openapi: 3.0.3
+info:
+  title: kabus-ws-mirror API
+  version: 1.0.0
+  description: |
+    kabus-ws-mirror が提供するローカル HTTP API 仕様です。
+servers:
+  - url: http://localhost:8080
+    description: local
+tags:
+  - name: system
+    description: 稼働確認
+  - name: kabus
+    description: KabuS 制御
+  - name: symbols
+    description: 登録銘柄 DB 管理
+paths:
+  /health:
+    get:
+      tags:
+        - system
+      summary: ヘルスチェック
+      operationId: getHealth
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+              example:
+                status: ok
+  /kabus/login:
+    post:
+      tags:
+        - kabus
+      summary: KabuS ログインと登録銘柄同期を実行
+      description: |
+        KabuS の起動確認、ログインボタン押下、APIKey 取得、登録銘柄全解除、
+        DB 保持銘柄の再登録を一連で実行します。
+      operationId: postKabusLogin
+      responses:
+        "202":
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+              example:
+                status: accepted
+                message: KabuS のログイン操作後に APIKey 取得、銘柄登録全解除、定義銘柄の再登録まで実行しました。PID はプログラム内部に保持しています。APIKey はサーバー標準出力へ表示します。
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                status: error
+                message: KabuS のログイン操作に失敗しました。
+  /kabus/exit:
+    post:
+      tags:
+        - kabus
+      summary: KabuS を終了
+      operationId: postKabusExit
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+              example:
+                status: ok
+                message: KabuS の終了を実行しました。
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                status: error
+                message: 保持している KabuS の PID がありません。先に /kabus/login を実行してください
+  /kabus/symbols:
+    get:
+      tags:
+        - symbols
+      summary: 登録銘柄 DB の内容を取得
+      operationId: getKabusSymbols
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SymbolsResponse"
+              example:
+                symbols:
+                  - symbol: "165120019"
+                    exchange: 2
+                  - symbol: "136091318"
+                    exchange: 2
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                status: error
+                message: symbol store のオープンに失敗しました。
+    post:
+      tags:
+        - symbols
+      summary: 登録銘柄 DB を更新して KabuS の登録銘柄を同期
+      description: |
+        DB に保持する登録銘柄を全件置換し、その直後に KabuS 側で登録銘柄全解除と再登録を実行します。
+      operationId: postKabusSymbols
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SymbolStoreRequest"
+            example:
+              symbols:
+                - symbol: "165120019"
+                  exchange: 2
+                - symbol: "136091318"
+                  exchange: 2
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PostSymbolsResponse"
+              example:
+                status: ok
+                symbols:
+                  - symbol: "165120019"
+                    exchange: 2
+                  - symbol: "136091318"
+                    exchange: 2
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                status: error
+                message: invalid character '}' looking for beginning of object key string
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                status: error
+                message: 銘柄登録に失敗しました。
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          example: ok
+    MessageResponse:
+      type: object
+      required:
+        - status
+        - message
+      properties:
+        status:
+          type: string
+          example: ok
+        message:
+          type: string
+          example: completed
+    ErrorResponse:
+      type: object
+      required:
+        - status
+        - message
+      properties:
+        status:
+          type: string
+          example: error
+        message:
+          type: string
+          example: error message
+    StoredRegisterSymbol:
+      type: object
+      required:
+        - symbol
+        - exchange
+      properties:
+        symbol:
+          type: string
+          description: 登録する銘柄コード
+          example: "165120019"
+        exchange:
+          type: integer
+          format: int32
+          description: 市場コード
+          example: 2
+    SymbolsResponse:
+      type: object
+      required:
+        - symbols
+      properties:
+        symbols:
+          type: array
+          items:
+            $ref: "#/components/schemas/StoredRegisterSymbol"
+    SymbolStoreRequest:
+      type: object
+      required:
+        - symbols
+      properties:
+        symbols:
+          type: array
+          items:
+            $ref: "#/components/schemas/StoredRegisterSymbol"
+    PostSymbolsResponse:
+      type: object
+      required:
+        - status
+        - symbols
+      properties:
+        status:
+          type: string
+          example: ok
+        symbols:
+          type: array
+          items:
+            $ref: "#/components/schemas/StoredRegisterSymbol"
