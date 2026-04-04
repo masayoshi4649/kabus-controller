@@ -88,19 +88,21 @@ func storeKabuStationPID(pid int, startedAt time.Time) {
 // storeKabuStationAPIKey は保持する APIKey を更新する。
 func storeKabuStationAPIKey(apiKey string) {
 	kabuStationStateMu.Lock()
-	defer kabuStationStateMu.Unlock()
-
 	kabuStationAPIKey = strings.TrimSpace(apiKey)
+	kabuStationStateMu.Unlock()
+
+	triggerKabuPollingNow()
 }
 
 // clearKabuStationSessionState は保持している KabuS セッション状態を初期化する。
 func clearKabuStationSessionState() {
 	kabuStationStateMu.Lock()
-	defer kabuStationStateMu.Unlock()
-
 	kabuStationPID = 0
 	kabuStationAPIKey = ""
 	kabuStationSessionStartedAt = time.Time{}
+	kabuStationStateMu.Unlock()
+
+	clearKabuPollingState()
 }
 
 // newKabuLoginService は設定ファイルを元に KabuS 制御サービスを生成する。

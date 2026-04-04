@@ -1,2 +1,3 @@
 # kabus-controller
 KabuStationが動作するWindowsServerで動かすためのツール
+現時点では先物取引を中心にしている。

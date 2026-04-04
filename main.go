@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
 
@@ -22,6 +23,12 @@ func main() {
 	if err := registerKabuStationRoutes(router); err != nil {
 		log.Fatal(err)
 	}
+
+	pollingService, err := newKabuPollingService()
+	if err != nil {
+		log.Fatal(err)
+	}
+	pollingService.Start(context.Background())
 
 	if err := router.Run(":" + port); err != nil {
 		log.Fatal(err)

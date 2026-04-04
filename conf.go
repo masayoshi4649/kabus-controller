@@ -3,6 +3,7 @@ package main
 import (
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/BurntSushi/toml"
 )
@@ -20,6 +21,9 @@ type appConfig struct {
 		WaitSecond   int    `toml:"WaitSecond"`
 		WebSocketURL string `toml:"WebSocketURL"`
 	} `toml:"KABUSTATION"`
+	Trade struct {
+		PollingIntervalMillisec int `toml:"POLLING_INTERVAL_MILLISEC"`
+	} `toml:"TRADE"`
 }
 
 // loadConfig は [`config.toml`](config.toml) を読み込んでアプリ設定を返す。
@@ -66,4 +70,18 @@ func loadKabuStationWebSocketURL() (string, error) {
 	}
 
 	return wsURL, nil
+}
+
+// loadTradePollingInterval は定期ポーリングの実行間隔を返す。
+func loadTradePollingInterval() (time.Duration, error) {
+	config, err := loadConfig()
+	if err != nil {
+		return 0, err
+	}
+
+	if config.Trade.PollingIntervalMillisec <= 0 {
+		return 0, nil
+	}
+
+	return time.Duration(config.Trade.PollingIntervalMillisec) * time.Millisecond, nil
 }

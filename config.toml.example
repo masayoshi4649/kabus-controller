@@ -11,3 +11,7 @@ PATH = 'C:\Users\taro\AppData\Local\kabuStation\KabuS.exe'
 
 # KabuStation の ログインボタンを押すまでの待機時間(秒)
 WaitSecond = 5
+
+[TRADE]
+# KabuS REST API の定期取得間隔(ミリ秒)。0 以下ならバックグラウンドポーリングを無効化します。
+POLLING_INTERVAL_MILLISEC = 1000
