@@ -1,0 +1,2 @@
+# kabus-controller
+KabuStationが動作するWindowsServerで動かすためのツール
