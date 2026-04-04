@@ -17,6 +17,7 @@ func main() {
 	router := gin.Default()
 	router.Use(corsMiddleware())
 	router.GET("/health", healthHandler)
+	router.GET("/helthchek", healthHandler)
 
 	if err := registerKabuStationRoutes(router); err != nil {
 		log.Fatal(err)
@@ -45,5 +46,14 @@ func corsMiddleware() gin.HandlerFunc {
 
 // healthHandler は稼働確認用のヘルスチェック応答を返す。
 func healthHandler(c *gin.Context) {
-	c.JSON(200, gin.H{"status": "ok"})
+	sessionState := currentKabuStationSessionState()
+	response := gin.H{
+		"status":                   "ok",
+		"kabus_session_started_at": nil,
+	}
+	if !sessionState.StartedAt.IsZero() {
+		response["kabus_session_started_at"] = sessionState.StartedAt
+	}
+
+	c.JSON(http.StatusOK, response)
 }

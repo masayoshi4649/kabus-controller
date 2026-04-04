@@ -1,9 +1,9 @@
 openapi: 3.0.3
 info:
-  title: kabus-ws-mirror API
+  title: kabus-ws-controller API
   version: 1.0.0
   description: |
-    kabus-ws-mirror が提供するローカル HTTP API 仕様です。
+    kabus-ws-controller が提供するローカル HTTP API 仕様です。
 servers:
   - url: http://localhost:8080
     description: local
@@ -30,6 +30,23 @@ paths:
                 $ref: "#/components/schemas/HealthResponse"
               example:
                 status: ok
+                kabus_session_started_at: "2026-04-05T02:15:04+09:00"
+  /helthchek:
+    get:
+      tags:
+        - system
+      summary: ヘルスチェック（互換エイリアス）
+      operationId: getHelthchek
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+              example:
+                status: ok
+                kabus_session_started_at: "2026-04-05T02:15:04+09:00"
   /kabus/login:
     post:
       tags:
@@ -172,6 +189,12 @@ components:
         status:
           type: string
           example: ok
+        kabus_session_started_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: 直近の `/kabus/login` で KabuS の PID を取得した時刻。未ログイン時は null。
+          example: "2026-04-05T02:15:04+09:00"
     MessageResponse:
       type: object
       required:

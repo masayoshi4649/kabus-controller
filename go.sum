@@ -40,8 +40,8 @@ github.com/klauspost/cpuid/v2 v2.3.0 h1:S4CRMLnYUhGeDFDqkGriYKdfoFlDnMtqTiI/sFzh
 github.com/klauspost/cpuid/v2 v2.3.0/go.mod h1:hqwkgyIinND0mEev00jJYCxPNVRVXFQeu1XKlok6oO0=
 github.com/leodido/go-urn v1.4.0 h1:WT9HwE9SGECu3lg4d/dIA+jxlljEa1/ffXKmRjqdmIQ=
 github.com/leodido/go-urn v1.4.0/go.mod h1:bvxc+MVxLKB4z00jd1z+Dvzr47oO32F/QSNjSBOlFxI=
-github.com/masayoshi4649/kabus-api v0.0.0-20260403163442-13ca5bc9447d h1:p6d9PoSFT7KvR8688R7uklkO3Nmxuak/u+rny25s9T8=
-github.com/masayoshi4649/kabus-api v0.0.0-20260403163442-13ca5bc9447d/go.mod h1:/ak1HksVFtiSL/3iZ+aJ1NGLCh6He6IotuxH/RBJCoM=
+github.com/masayoshi4649/kabus-api v0.0.0-20260404161105-5465d887ca37 h1:c5FKM/fVgfNPo5r0LbKHt7gK5+reVHoN6c1TDZO7Ldg=
+github.com/masayoshi4649/kabus-api v0.0.0-20260404161105-5465d887ca37/go.mod h1:/ak1HksVFtiSL/3iZ+aJ1NGLCh6He6IotuxH/RBJCoM=
 github.com/mattn/go-isatty v0.0.20 h1:xfD0iDuEKnDkl03q4limB+vH+GxLEtL/jb4xVJSWWEY=
 github.com/mattn/go-isatty v0.0.20/go.mod h1:W+V8PltTTMOvKvAeJH7IuucS94S2C6jfK/D7dTCTo3Y=
 github.com/modern-go/concurrent v0.0.0-20180228061459-e0a39a4cb421/go.mod h1:6dJC0mAP4ikYIbvyc7fijjWJddQyLn8Ig3JB5CqoB9Q=

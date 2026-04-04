@@ -27,8 +27,18 @@ const (
 	symbolStoreBucketName   = "registered_symbols"
 )
 
-var kabuStationPID int
-var kabuStationAPIKey string
+var (
+	kabuStationStateMu          sync.RWMutex
+	kabuStationPID              int
+	kabuStationAPIKey           string
+	kabuStationSessionStartedAt time.Time
+)
+
+type kabuStationSessionState struct {
+	PID       int
+	APIKey    string
+	StartedAt time.Time
+}
 
 type kabuLoginService struct {
 	exePath        string
@@ -52,6 +62,45 @@ type symbolStore struct {
 type storedRegisterSymbol struct {
 	Symbol   string `json:"symbol"`
 	Exchange int    `json:"exchange"`
+}
+
+// currentKabuStationSessionState は現在保持している KabuS セッション状態を返す。
+func currentKabuStationSessionState() kabuStationSessionState {
+	kabuStationStateMu.RLock()
+	defer kabuStationStateMu.RUnlock()
+
+	return kabuStationSessionState{
+		PID:       kabuStationPID,
+		APIKey:    kabuStationAPIKey,
+		StartedAt: kabuStationSessionStartedAt,
+	}
+}
+
+// storeKabuStationPID は保持する KabuS PID とセッション開始時刻を更新する。
+func storeKabuStationPID(pid int, startedAt time.Time) {
+	kabuStationStateMu.Lock()
+	defer kabuStationStateMu.Unlock()
+
+	kabuStationPID = pid
+	kabuStationSessionStartedAt = startedAt
+}
+
+// storeKabuStationAPIKey は保持する APIKey を更新する。
+func storeKabuStationAPIKey(apiKey string) {
+	kabuStationStateMu.Lock()
+	defer kabuStationStateMu.Unlock()
+
+	kabuStationAPIKey = strings.TrimSpace(apiKey)
+}
+
+// clearKabuStationSessionState は保持している KabuS セッション状態を初期化する。
+func clearKabuStationSessionState() {
+	kabuStationStateMu.Lock()
+	defer kabuStationStateMu.Unlock()
+
+	kabuStationPID = 0
+	kabuStationAPIKey = ""
+	kabuStationSessionStartedAt = time.Time{}
 }
 
 // newKabuLoginService は設定ファイルを元に KabuS 制御サービスを生成する。
@@ -115,7 +164,7 @@ func (s *kabuLoginService) TriggerLogin() error {
 
 	pid, err := clickKabuStationLogin(ctx, s.exePath, s.timeout, s.clickWait, s.powerShellPath)
 	if pid > 0 {
-		kabuStationPID = pid
+		storeKabuStationPID(pid, time.Now())
 	}
 	if err != nil {
 		return err
@@ -162,7 +211,8 @@ func (s *kabuLoginService) syncStoredSymbols(ctx context.Context, client *kabusa
 
 // newAuthenticatedAPIClient は現在の APIKey または APIPW を使って認証済みクライアントを返す。
 func (s *kabuLoginService) newAuthenticatedAPIClient(ctx context.Context) (*kabusapi.Client, error) {
-	apiClient := kabusapi.NewClient(kabusapi.Config{Token: strings.TrimSpace(kabuStationAPIKey)})
+	sessionState := currentKabuStationSessionState()
+	apiClient := kabusapi.NewClient(kabusapi.Config{Token: strings.TrimSpace(sessionState.APIKey)})
 	if strings.TrimSpace(apiClient.Token()) != "" {
 		return apiClient, nil
 	}
@@ -184,19 +234,19 @@ func (s *kabuLoginService) Exit() error {
 		return fmt.Errorf("KabuS の終了操作は Windows でのみ利用できます")
 	}
 
-	if kabuStationPID <= 0 {
+	sessionState := currentKabuStationSessionState()
+	if sessionState.PID <= 0 {
 		return fmt.Errorf("保持している KabuS の PID がありません。先に /kabus/login を実行してください")
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	if err := exitKabuStation(ctx, kabuStationPID); err != nil {
+	if err := exitKabuStation(ctx, sessionState.PID); err != nil {
 		return err
 	}
 
-	kabuStationPID = 0
-	kabuStationAPIKey = ""
+	clearKabuStationSessionState()
 
 	return nil
 }
@@ -528,7 +578,7 @@ func issueAndPrintKabuAPIKey(ctx context.Context, client *kabusapi.Client, apiPa
 		if err == nil {
 			token := strings.TrimSpace(response.Token)
 			if token != "" {
-				kabuStationAPIKey = token
+				storeKabuStationAPIKey(token)
 				fmt.Printf("APIKey: %s\n", token)
 				return nil
 			}
