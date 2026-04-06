@@ -12,6 +12,8 @@ tags:
     description: 稼働確認
   - name: kabus
     description: KabuS 制御
+  - name: future
+    description: 先物ポーリング結果
   - name: symbols
     description: 登録銘柄 DB 管理
 paths:
@@ -47,6 +49,54 @@ paths:
               example:
                 status: ok
                 kabus_session_started_at: "2026-04-05T02:15:04+09:00"
+  /future/wallet:
+    get:
+      tags:
+        - future
+      summary: ポーリング済み先物余力を取得
+      description: バックグラウンドポーリングで最後に取得した `/wallet/future` の結果をそのまま返します。
+      operationId: getFutureWalletSnapshot
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FutureWalletSnapshot"
+              example:
+                FutureTradeLimit: 1234567
+                MarginRequirement: 765432
+                MarginRequirementSell: 654321
+  /future/orders:
+    get:
+      tags:
+        - future
+      summary: ポーリング済み先物注文一覧を取得
+      description: バックグラウンドポーリングで最後に取得した `/orders?product=3` の結果をそのまま返します。
+      operationId: getFutureOrdersSnapshot
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FutureOrdersSnapshot"
+              example: []
+  /future/positions:
+    get:
+      tags:
+        - future
+      summary: ポーリング済み先物建玉一覧を取得
+      description: バックグラウンドポーリングで最後に取得した `/positions?product=3` の結果をそのまま返します。
+      operationId: getFuturePositionsSnapshot
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FuturePositionsSnapshot"
+              example: []
   /kabus/login:
     post:
       tags:
@@ -195,6 +245,37 @@ components:
           nullable: true
           description: 直近の `/kabus/login` で KabuS の PID を取得した時刻。未ログイン時は null。
           example: "2026-04-05T02:15:04+09:00"
+    FutureWalletSnapshot:
+      type: object
+      description: バックグラウンドポーリングで保持している `/wallet/future` の最新結果。
+      properties:
+        FutureTradeLimit:
+          type: number
+          format: double
+          nullable: true
+          description: 新規建玉可能額
+        MarginRequirement:
+          type: number
+          format: double
+          nullable: true
+          description: 買い必要証拠金額
+        MarginRequirementSell:
+          type: number
+          format: double
+          nullable: true
+          description: 売り必要証拠金額
+    FutureOrdersSnapshot:
+      type: array
+      description: バックグラウンドポーリングで保持している `/orders?product=3` の最新結果。
+      items:
+        type: object
+        additionalProperties: true
+    FuturePositionsSnapshot:
+      type: array
+      description: バックグラウンドポーリングで保持している `/positions?product=3` の最新結果。
+      items:
+        type: object
+        additionalProperties: true
     MessageResponse:
       type: object
       required:

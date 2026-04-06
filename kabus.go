@@ -28,6 +28,9 @@ func registerKabuStationRoutes(router *gin.Engine) error {
 	router.POST("/kabus/exit", service.handleExit)
 	router.GET("/kabus/symbols", service.handleSymbolsGet)
 	router.POST("/kabus/symbols", service.handleSymbolsPost)
+	router.GET("/future/wallet", handleFutureWalletGet)
+	router.GET("/future/orders", handleFutureOrdersGet)
+	router.GET("/future/positions", handleFuturePositionsGet)
 	router.GET("/kabusapi/websocket", wsProxyService.handleWebSocketProxy)
 
 	return nil
@@ -115,4 +118,19 @@ func (s *kabuLoginService) handleSymbolsPost(c *gin.Context) {
 		"status":  "ok",
 		"symbols": req.Symbols,
 	})
+}
+
+// handleFutureWalletGet はポーリングで保持している先物余力を返す HTTP ハンドラである。
+func handleFutureWalletGet(c *gin.Context) {
+	c.JSON(http.StatusOK, currentKabuPollingFutureWallet())
+}
+
+// handleFutureOrdersGet はポーリングで保持している先物注文一覧を返す HTTP ハンドラである。
+func handleFutureOrdersGet(c *gin.Context) {
+	c.JSON(http.StatusOK, currentKabuPollingOrders())
+}
+
+// handleFuturePositionsGet はポーリングで保持している先物建玉一覧を返す HTTP ハンドラである。
+func handleFuturePositionsGet(c *gin.Context) {
+	c.JSON(http.StatusOK, currentKabuPollingPositions())
 }

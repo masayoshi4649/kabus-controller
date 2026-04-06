@@ -115,6 +115,38 @@ func clearKabuPollingState() {
 	kabuPollingLastUpdatedAt = time.Time{}
 }
 
+// currentKabuPollingFutureWallet は保持中の先物余力スナップショットを返す。
+func currentKabuPollingFutureWallet() kabusapi.FutureWalletResponse {
+	kabuPollingStateMu.RLock()
+	defer kabuPollingStateMu.RUnlock()
+
+	return kabuPollingFutureWallet
+}
+
+// currentKabuPollingOrders は保持中の先物注文一覧スナップショットを返す。
+func currentKabuPollingOrders() kabusapi.OrdersResponse {
+	kabuPollingStateMu.RLock()
+	defer kabuPollingStateMu.RUnlock()
+
+	if kabuPollingOrders == nil {
+		return kabusapi.OrdersResponse{}
+	}
+
+	return append(kabusapi.OrdersResponse(nil), kabuPollingOrders...)
+}
+
+// currentKabuPollingPositions は保持中の先物建玉一覧スナップショットを返す。
+func currentKabuPollingPositions() kabusapi.PositionsResponse {
+	kabuPollingStateMu.RLock()
+	defer kabuPollingStateMu.RUnlock()
+
+	if kabuPollingPositions == nil {
+		return kabusapi.PositionsResponse{}
+	}
+
+	return append(kabusapi.PositionsResponse(nil), kabuPollingPositions...)
+}
+
 func setActiveKabuPollingService(service *kabuPollingService) {
 	kabuPollingServiceMu.Lock()
 	defer kabuPollingServiceMu.Unlock()
@@ -221,7 +253,7 @@ func storeKabuPollingFutureWallet(response kabusapi.FutureWalletResponse) {
 
 	kabuPollingFutureWallet = response
 	kabuPollingLastUpdatedAt = time.Now()
-	debugLogKabuPollingUpdate("/wallet/future updated")
+	// debugLogKabuPollingUpdate("/wallet/future updated")
 }
 
 func storeKabuPollingOrders(response kabusapi.OrdersResponse) {
@@ -232,7 +264,7 @@ func storeKabuPollingOrders(response kabusapi.OrdersResponse) {
 
 	kabuPollingOrders = cloned
 	kabuPollingLastUpdatedAt = time.Now()
-	debugLogKabuPollingUpdate(fmt.Sprintf("/orders?product=%s updated count=%d", derivativesProductCode, len(cloned)))
+	// debugLogKabuPollingUpdate(fmt.Sprintf("/orders?product=%s updated count=%d", derivativesProductCode, len(cloned)))
 }
 
 func storeKabuPollingPositions(response kabusapi.PositionsResponse) {
@@ -243,7 +275,7 @@ func storeKabuPollingPositions(response kabusapi.PositionsResponse) {
 
 	kabuPollingPositions = cloned
 	kabuPollingLastUpdatedAt = time.Now()
-	debugLogKabuPollingUpdate(fmt.Sprintf("/positions?product=%s updated count=%d", derivativesProductCode, len(cloned)))
+	// debugLogKabuPollingUpdate(fmt.Sprintf("/positions?product=%s updated count=%d", derivativesProductCode, len(cloned)))
 }
 
 // DEBUG: ポーリング更新の確認用に、取得できたデータ種別を一時的に標準ログへ出力する。
