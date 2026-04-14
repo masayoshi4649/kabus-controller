@@ -33,22 +33,6 @@ paths:
               example:
                 status: ok
                 kabus_session_started_at: "2026-04-05T02:15:04+09:00"
-  /helthchek:
-    get:
-      tags:
-        - system
-      summary: ヘルスチェック（互換エイリアス）
-      operationId: getHelthchek
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/HealthResponse"
-              example:
-                status: ok
-                kabus_session_started_at: "2026-04-05T02:15:04+09:00"
   /future/wallet:
     get:
       tags:
@@ -67,6 +51,25 @@ paths:
                 FutureTradeLimit: 1234567
                 MarginRequirement: 765432
                 MarginRequirementSell: 654321
+  /future/products:
+    get:
+      tags:
+        - future
+      summary: 先物商品コード一覧を取得
+      description: アプリケーション内に定義した先物商品コード一覧を返します。
+      operationId: getFutureProducts
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FutureProductsResponse"
+              example:
+                - future_code: NK225
+                  future_name: 日経平均先物
+                - future_code: NK225mini
+                  future_name: 日経225mini先物
   /future/orders:
     get:
       tags:
@@ -97,6 +100,56 @@ paths:
               schema:
                 $ref: "#/components/schemas/FuturePositionsSnapshot"
               example: []
+  /future/symbolname:
+    get:
+      tags:
+        - future
+      summary: 先物銘柄コードを取得
+      description: 保持済み APIKey を使って `/symbolname/future` を呼び出し、APIKey 以外のクエリをそのまま転送します。
+      operationId: getFutureSymbolName
+      parameters:
+        - in: query
+          name: FutureCode
+          required: true
+          schema:
+            type: string
+          description: 先物コード
+        - in: query
+          name: DerivMonth
+          required: false
+          schema:
+            type: integer
+            format: int32
+            default: 0
+          description: 限月。0 の場合は直近限月
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FutureSymbolNameResponse"
+              example:
+                Symbol: 165120018
+                SymbolName: 日経225先物 2025年12月限
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                status: error
+                message: FutureCode は必須です
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                status: error
+                message: APIKey が保持されていません。先に /kabus/login を実行してください
   /kabus/login:
     post:
       tags:
@@ -264,6 +317,22 @@ components:
           format: double
           nullable: true
           description: 売り必要証拠金額
+    FutureProduct:
+      type: object
+      required:
+        - future_code
+        - future_name
+      properties:
+        future_code:
+          type: string
+          example: NK225
+        future_name:
+          type: string
+          example: 日経平均先物
+    FutureProductsResponse:
+      type: array
+      items:
+        $ref: "#/components/schemas/FutureProduct"
     FutureOrdersSnapshot:
       type: array
       description: バックグラウンドポーリングで保持している `/orders?product=3` の最新結果。
@@ -276,6 +345,18 @@ components:
       items:
         type: object
         additionalProperties: true
+    FutureSymbolNameResponse:
+      type: object
+      required:
+        - Symbol
+        - SymbolName
+      properties:
+        Symbol:
+          type: string
+          example: "165120018"
+        SymbolName:
+          type: string
+          example: 日経225先物 2025年12月限
     MessageResponse:
       type: object
       required:

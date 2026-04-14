@@ -8,9 +8,13 @@ import (
 	"github.com/BurntSushi/toml"
 )
 
+// configPath はアプリケーションが読み込む設定ファイルのパスである。
 const configPath = "config.toml"
+
+// defaultKabuStationWebSocketURL は WebSocket 中継先が未設定のときに使う既定値である。
 const defaultKabuStationWebSocketURL = "ws://localhost:18080/kabusapi/websocket"
 
+// appConfig は [`config.toml`](config.toml) 全体の設定構造を表す。
 type appConfig struct {
 	System struct {
 		Port int `toml:"Port"`

@@ -3,11 +3,15 @@ package main
 import (
 	"context"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	kabusapi "github.com/masayoshi4649/kabus-api"
 )
 
+// symbolStoreRequest は登録銘柄更新 API のリクエストボディを表す。
 type symbolStoreRequest struct {
 	Symbols []storedRegisterSymbol `json:"symbols"`
 }
@@ -28,9 +32,11 @@ func registerKabuStationRoutes(router *gin.Engine) error {
 	router.POST("/kabus/exit", service.handleExit)
 	router.GET("/kabus/symbols", service.handleSymbolsGet)
 	router.POST("/kabus/symbols", service.handleSymbolsPost)
+	router.GET("/future/products", handleFutureProductsGet)
 	router.GET("/future/wallet", handleFutureWalletGet)
 	router.GET("/future/orders", handleFutureOrdersGet)
 	router.GET("/future/positions", handleFuturePositionsGet)
+	router.GET("/future/symbolname", handleFutureSymbolNameGet)
 	router.GET("/kabusapi/websocket", wsProxyService.handleWebSocketProxy)
 
 	return nil
@@ -120,6 +126,11 @@ func (s *kabuLoginService) handleSymbolsPost(c *gin.Context) {
 	})
 }
 
+// handleFutureProductsGet は先物商品コード一覧を返す HTTP ハンドラである。
+func handleFutureProductsGet(c *gin.Context) {
+	c.JSON(http.StatusOK, FutureProducts)
+}
+
 // handleFutureWalletGet はポーリングで保持している先物余力を返す HTTP ハンドラである。
 func handleFutureWalletGet(c *gin.Context) {
 	c.JSON(http.StatusOK, currentKabuPollingFutureWallet())
@@ -133,4 +144,56 @@ func handleFutureOrdersGet(c *gin.Context) {
 // handleFuturePositionsGet はポーリングで保持している先物建玉一覧を返す HTTP ハンドラである。
 func handleFuturePositionsGet(c *gin.Context) {
 	c.JSON(http.StatusOK, currentKabuPollingPositions())
+}
+
+// handleFutureSymbolNameGet は保持済み APIKey を使って先物銘柄コード情報を取得する HTTP ハンドラである。
+func handleFutureSymbolNameGet(c *gin.Context) {
+	sessionState := currentKabuStationSessionState()
+	apiKey := strings.TrimSpace(sessionState.APIKey)
+	if apiKey == "" {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"status":  "error",
+			"message": "APIKey が保持されていません。先に /kabus/login を実行してください",
+		})
+		return
+	}
+
+	futureCode := strings.TrimSpace(c.Query("FutureCode"))
+	if futureCode == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "error",
+			"message": "FutureCode は必須です",
+		})
+		return
+	}
+
+	derivMonthText := strings.TrimSpace(c.DefaultQuery("DerivMonth", "0"))
+	derivMonth, err := strconv.Atoi(derivMonthText)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "error",
+			"message": "DerivMonth は整数で指定してください",
+		})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
+	defer cancel()
+
+	client := kabusapi.NewClient(kabusapi.Config{Token: apiKey})
+	defer client.CloseIdleConnections()
+
+	response, err := client.GetFutureSymbolName(ctx, kabusapi.FutureSymbolNameOptions{
+		FutureCode: futureCode,
+		DerivMonth: derivMonth,
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"status":  "error",
+			"message": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, response)
 }

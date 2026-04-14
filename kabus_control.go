@@ -21,10 +21,14 @@ import (
 )
 
 const (
+	// defaultKabuLoginTimeout は KabuS ログイン自動化の既定タイムアウトである。
 	defaultKabuLoginTimeout = 60 * time.Second
-	defaultPowerShellPath   = "powershell.exe"
-	defaultSymbolStorePath  = "db/kabus_symbols.db"
-	symbolStoreBucketName   = "registered_symbols"
+	// defaultPowerShellPath は UI Automation 実行に使う PowerShell の既定コマンドである。
+	defaultPowerShellPath = "powershell.exe"
+	// defaultSymbolStorePath は登録銘柄一覧を保存する bbolt ファイルの既定パスである。
+	defaultSymbolStorePath = "db/kabus_symbols.db"
+	// symbolStoreBucketName は登録銘柄一覧を格納する bbolt バケット名である。
+	symbolStoreBucketName = "registered_symbols"
 )
 
 var (
@@ -34,12 +38,14 @@ var (
 	kabuStationSessionStartedAt time.Time
 )
 
+// kabuStationSessionState は現在保持している KabuS セッション情報を表す。
 type kabuStationSessionState struct {
 	PID       int
 	APIKey    string
 	StartedAt time.Time
 }
 
+// kabuLoginService は KabuS の起動、ログイン、終了、および銘柄同期を制御する。
 type kabuLoginService struct {
 	exePath        string
 	timeout        time.Duration
@@ -50,15 +56,18 @@ type kabuLoginService struct {
 	mu             sync.Mutex
 }
 
+// processInfo は `tasklist.exe` から取得したプロセス情報を表す。
 type processInfo struct {
 	ImageName string
 	PID       int
 }
 
+// symbolStore は登録銘柄一覧を bbolt へ永続化するためのストアである。
 type symbolStore struct {
 	path string
 }
 
+// storedRegisterSymbol は KabuS 登録銘柄の永続化形式を表す。
 type storedRegisterSymbol struct {
 	Symbol   string `json:"symbol"`
 	Exchange int    `json:"exchange"`
@@ -254,6 +263,23 @@ func (s *kabuLoginService) Exit() error {
 }
 
 // clickKabuStationLogin は KabuS の起動確認後にログインボタン押下を実行し PID を返す。
+//
+// Example:
+//
+//	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+//	defer cancel()
+//
+//	pid, err := clickKabuStationLogin(
+//		ctx,
+//		`C:\Users\example\AppData\Local\kabuStation\KabuS.exe`,
+//		60*time.Second,
+//		5*time.Second,
+//		"powershell.exe",
+//	)
+//	if err != nil {
+//		log.Fatal(err)
+//	}
+//	fmt.Println(pid)
 func clickKabuStationLogin(ctx context.Context, exePath string, timeout time.Duration, clickWait time.Duration, powerShellPath string) (int, error) {
 	proc, found, err := findProcessByImageName(ctx, "KabuS.exe")
 	if err != nil {
@@ -603,6 +629,16 @@ func issueAndPrintKabuAPIKey(ctx context.Context, client *kabusapi.Client, apiPa
 }
 
 // runLoginAutomation は PowerShell UI Automation を起動してログインボタン押下を実行する。
+//
+// Example:
+//
+//	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+//	defer cancel()
+//
+//	err := runLoginAutomation(ctx, 60*time.Second, 5*time.Second, "powershell.exe")
+//	if err != nil {
+//		log.Fatal(err)
+//	}
 func runLoginAutomation(ctx context.Context, timeout time.Duration, clickWait time.Duration, powerShellPath string) error {
 	script := loginAutomationScript(int(timeout/time.Second), int(clickWait/time.Second))
 	encoded := encodePowerShellScript(script)

@@ -18,7 +18,6 @@ func main() {
 	router := gin.Default()
 	router.Use(corsMiddleware())
 	router.GET("/health", healthHandler)
-	router.GET("/helthchek", healthHandler)
 
 	if err := registerKabuStationRoutes(router); err != nil {
 		log.Fatal(err)

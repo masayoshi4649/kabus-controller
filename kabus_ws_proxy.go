@@ -15,8 +15,13 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+// wsProxyBufferSize は WebSocket フレーム転送時に使うバッファサイズである。
 const wsProxyBufferSize = 32 * 1024
+
+// wsProxyHandshakeTimeout は上流 WebSocket とのハンドシェイク待機時間である。
 const wsProxyHandshakeTimeout = 10 * time.Second
+
+// wsProxyCloseWriteTimeout は Close フレーム転送時の書き込み期限である。
 const wsProxyCloseWriteTimeout = 5 * time.Second
 
 // kabuStationWSProxyService は KabuS のローカル WebSocket を外部公開用に中継する。

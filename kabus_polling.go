@@ -12,7 +12,9 @@ import (
 )
 
 const (
-	derivativesProductCode           = "3"
+	// derivativesProductCode は先物商品を表す product コードである。
+	derivativesProductCode = "3"
+	// defaultKabuPollingRequestTimeout は 1 回のポーリング要求に対する既定タイムアウトである。
 	defaultKabuPollingRequestTimeout = 5 * time.Second
 )
 
@@ -38,6 +40,11 @@ var (
 	activeKabuPollingService *kabuPollingService
 )
 
+// kabuPollingService は KabuS REST API の定期ポーリング実行を管理する。
+//
+// interval はポーリング周期、ctx は停止制御、inFlight は多重実行防止に使う。
+// 前回の周期処理が完了していない間は次の周期を起動しないことで、
+// 外部 API の遅延時にも goroutine が滞留し続けないようにする。
 type kabuPollingService struct {
 	interval time.Duration
 	ctx      context.Context
@@ -147,6 +154,7 @@ func currentKabuPollingPositions() kabusapi.PositionsResponse {
 	return append(kabusapi.PositionsResponse(nil), kabuPollingPositions...)
 }
 
+// setActiveKabuPollingService は現在有効なポーリングサービスを差し替える。
 func setActiveKabuPollingService(service *kabuPollingService) {
 	kabuPollingServiceMu.Lock()
 	defer kabuPollingServiceMu.Unlock()
@@ -154,6 +162,8 @@ func setActiveKabuPollingService(service *kabuPollingService) {
 	activeKabuPollingService = service
 }
 
+// trigger はポーリング 1 回分の非同期実行を要求する。
+// 既に実行中のポーリングがある場合は何もせず終了する。
 func (s *kabuPollingService) trigger() {
 	if s == nil || s.ctx == nil {
 		return
@@ -177,6 +187,10 @@ func (s *kabuPollingService) trigger() {
 	}
 }
 
+// pollOnce は KabuS REST API から 1 周期分のスナップショットを取得する。
+//
+// `/wallet/future`、`/orders?product=3`、`/positions?product=3` はすべて並列取得し、
+// 取得できた内容をグローバルスナップショットへ反映する。
 func (s *kabuPollingService) pollOnce(ctx context.Context) error {
 	sessionState := currentKabuStationSessionState()
 	if sessionState.PID <= 0 {
@@ -211,7 +225,11 @@ func (s *kabuPollingService) pollOnce(ctx context.Context) error {
 	go func() {
 		defer wg.Done()
 
-		response, err := client.ListOrders(ctx, kabusapi.OrdersOptions{Product: derivativesProductCode})
+		orderDetails := false
+		response, err := client.ListOrders(ctx, kabusapi.OrdersOptions{
+			Product: derivativesProductCode,
+			Details: &orderDetails,
+		})
 		if err != nil {
 			errCh <- fmt.Errorf("/orders?product=%s: %w", derivativesProductCode, err)
 			return
@@ -247,6 +265,7 @@ func (s *kabuPollingService) pollOnce(ctx context.Context) error {
 	return nil
 }
 
+// storeKabuPollingFutureWallet は先物余力スナップショットを保存する。
 func storeKabuPollingFutureWallet(response kabusapi.FutureWalletResponse) {
 	kabuPollingStateMu.Lock()
 	defer kabuPollingStateMu.Unlock()
@@ -256,6 +275,7 @@ func storeKabuPollingFutureWallet(response kabusapi.FutureWalletResponse) {
 	// debugLogKabuPollingUpdate("/wallet/future updated")
 }
 
+// storeKabuPollingOrders は先物注文一覧スナップショットを保存する。
 func storeKabuPollingOrders(response kabusapi.OrdersResponse) {
 	cloned := append(kabusapi.OrdersResponse(nil), response...)
 
@@ -267,6 +287,7 @@ func storeKabuPollingOrders(response kabusapi.OrdersResponse) {
 	// debugLogKabuPollingUpdate(fmt.Sprintf("/orders?product=%s updated count=%d", derivativesProductCode, len(cloned)))
 }
 
+// storeKabuPollingPositions は先物建玉一覧スナップショットを保存する。
 func storeKabuPollingPositions(response kabusapi.PositionsResponse) {
 	cloned := append(kabusapi.PositionsResponse(nil), response...)
 
@@ -278,7 +299,7 @@ func storeKabuPollingPositions(response kabusapi.PositionsResponse) {
 	// debugLogKabuPollingUpdate(fmt.Sprintf("/positions?product=%s updated count=%d", derivativesProductCode, len(cloned)))
 }
 
-// DEBUG: ポーリング更新の確認用に、取得できたデータ種別を一時的に標準ログへ出力する。
+// debugLogKabuPollingUpdate は DEBUG 用にポーリング更新内容を標準ログへ出力する。
 func debugLogKabuPollingUpdate(message string) {
 	log.Println(message)
 }
