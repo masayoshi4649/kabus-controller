@@ -158,6 +158,9 @@ paths:
       description: |
         KabuS の起動確認、ログインボタン押下、APIKey 取得、登録銘柄全解除、
         DB 保持銘柄の再登録を一連で実行します。
+        ログインボタン探索中に別の認証ウインドウを検出した場合は候補 PID を記録し、
+        タイムアウト時はその認証ウインドウのみを強制終了します。
+        この PID は起動成功後に保持する KabuS の PID とは別管理です。
       operationId: postKabusLogin
       responses:
         "202":
@@ -177,7 +180,7 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
               example:
                 status: error
-                message: KabuS のログイン操作に失敗しました。
+                message: KabuS のログイン操作に失敗しました。タイムアウト時は検出済みの認証ウインドウを終了します。
   /kabus/exit:
     post:
       tags:

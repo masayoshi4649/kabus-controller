@@ -676,11 +676,13 @@ func encodePowerShellScript(script string) string {
 	return base64.StdEncoding.EncodeToString(buf)
 }
 
-// loginAutomationScript は KabuS のログインボタンを押下する PowerShell スクリプトを生成する。
+// loginAutomationScript は KabuS のログインボタンを押下し、認証ウインドウ候補 PID を監視する PowerShell スクリプトを生成する。
 func loginAutomationScript(timeoutSeconds int, clickWaitSeconds int) string {
 	return fmt.Sprintf(`
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes
+
+$script:trackedAuthWindow = $null
 
 function Get-KabuSMainWindow {
     param([int]$TimeoutSeconds = 30)
@@ -697,9 +699,264 @@ function Get-KabuSMainWindow {
     throw 'タイムアウト: KabuS のメインウィンドウが取得できませんでした。'
 }
 
+function Normalize-Text {
+    param([string]$Text)
+
+    if ($null -eq $Text) {
+        return ''
+    }
+
+    return $Text.Trim()
+}
+
+function Test-TextContainsAny {
+    param(
+        [string]$Text,
+        [string[]]$Keywords
+    )
+
+    $normalized = Normalize-Text -Text $Text
+    if ([string]::IsNullOrWhiteSpace($normalized)) {
+        return $false
+    }
+
+    foreach ($keyword in $Keywords) {
+        if ($normalized.IndexOf($keyword, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
+            return $true
+        }
+    }
+
+    return $false
+}
+
+function Get-TopLevelWindowHandleMap {
+    $result = @{}
+    $root = [System.Windows.Automation.AutomationElement]::RootElement
+    if (-not $root) {
+        return $result
+    }
+
+    $windows = $root.FindAll(
+        [System.Windows.Automation.TreeScope]::Children,
+        [System.Windows.Automation.Condition]::TrueCondition
+    )
+    if (-not $windows) {
+        return $result
+    }
+
+    for ($i = 0; $i -lt $windows.Count; $i++) {
+        $window = $windows.Item($i)
+        if (-not $window) {
+            continue
+        }
+
+        $windowHandle = 0
+        try {
+            $windowHandle = [int]$window.Current.NativeWindowHandle
+        } catch {
+            $windowHandle = 0
+        }
+
+        if ($windowHandle -ne 0) {
+            $result["$windowHandle"] = $true
+        }
+    }
+
+    return $result
+}
+
+function Get-AuthenticationWindowCandidate {
+    param(
+        [int]$MainProcessId,
+        [hashtable]$KnownWindowHandles
+    )
+
+    $root = [System.Windows.Automation.AutomationElement]::RootElement
+    if (-not $root) {
+        return $null
+    }
+
+    $windows = $root.FindAll(
+        [System.Windows.Automation.TreeScope]::Children,
+        [System.Windows.Automation.Condition]::TrueCondition
+    )
+    if (-not $windows -or $windows.Count -eq 0) {
+        return $null
+    }
+
+    $titleKeywords = @('認証', 'ログイン', 'サインイン', 'sign in', 'signin', 'login', 'au id', 'auじぶん', 'kabu', 'kabus', '証券', 'mufg')
+    $processKeywords = @('msedgewebview2', 'msedge', 'chrome', 'kabus')
+    $bestCandidate = $null
+    $bestScore = -1
+
+    for ($i = 0; $i -lt $windows.Count; $i++) {
+        $window = $windows.Item($i)
+        if (-not $window) {
+            continue
+        }
+
+        $windowProcessId = 0
+        try {
+            $windowProcessId = [int]$window.Current.ProcessId
+        } catch {
+            $windowProcessId = 0
+        }
+
+        if ($windowProcessId -le 0 -or $windowProcessId -eq $MainProcessId) {
+            continue
+        }
+
+        $windowHandle = 0
+        try {
+            $windowHandle = [int]$window.Current.NativeWindowHandle
+        } catch {
+            $windowHandle = 0
+        }
+
+        if ($windowHandle -eq 0) {
+            continue
+        }
+
+        if ($KnownWindowHandles.ContainsKey("$windowHandle")) {
+            continue
+        }
+
+        $windowTitle = Normalize-Text -Text $window.Current.Name
+        $proc = $null
+        try {
+            $proc = Get-Process -Id $windowProcessId -ErrorAction Stop
+        } catch {
+            continue
+        }
+
+        $processName = Normalize-Text -Text $proc.ProcessName
+        $matchesTitle = Test-TextContainsAny -Text $windowTitle -Keywords $titleKeywords
+        $matchesProcess = Test-TextContainsAny -Text $processName -Keywords $processKeywords
+
+        $score = 0
+        if ($matchesTitle) {
+            $score += 80
+        }
+        if ($matchesProcess) {
+            $score += 30
+        }
+        if (-not [string]::IsNullOrWhiteSpace($windowTitle)) {
+            $score += 10
+        }
+        if ($score -lt 80) {
+            continue
+        }
+
+        $startedAt = ''
+        try {
+            $startedAt = $proc.StartTime.ToString('o')
+        } catch {
+            $startedAt = ''
+        }
+
+        if ($score -gt $bestScore) {
+            $bestCandidate = [PSCustomObject]@{
+                ProcessId    = $windowProcessId
+                ProcessName  = $processName
+                WindowHandle = $windowHandle
+                WindowTitle  = $windowTitle
+                StartedAt    = $startedAt
+                Score        = $score
+            }
+            $bestScore = $score
+        }
+    }
+
+    return $bestCandidate
+}
+
+function Update-TrackedAuthenticationWindow {
+    param(
+        [int]$MainProcessId,
+        [hashtable]$KnownWindowHandles
+    )
+
+    $candidate = Get-AuthenticationWindowCandidate -MainProcessId $MainProcessId -KnownWindowHandles $KnownWindowHandles
+    if (-not $candidate) {
+        return
+    }
+
+    if (
+        $script:trackedAuthWindow -and
+        $script:trackedAuthWindow.ProcessId -eq $candidate.ProcessId -and
+        $script:trackedAuthWindow.WindowHandle -eq $candidate.WindowHandle
+    ) {
+        return
+    }
+
+    $script:trackedAuthWindow = $candidate
+    $title = $candidate.WindowTitle
+    if ([string]::IsNullOrWhiteSpace($title)) {
+        $title = '<no title>'
+    }
+
+    Write-Host (
+        '認証ウインドウ候補を記録しました。PID: {0}, Handle: {1}, Process: {2}, Title: {3}' -f
+        $candidate.ProcessId,
+        $candidate.WindowHandle,
+        $candidate.ProcessName,
+        $title
+    )
+}
+
+function Stop-TrackedAuthenticationWindow {
+    param([int]$MainProcessId)
+
+    if (-not $script:trackedAuthWindow) {
+        return $null
+    }
+
+    $tracked = $script:trackedAuthWindow
+    if ($tracked.ProcessId -le 0 -or $tracked.ProcessId -eq $MainProcessId) {
+        return $null
+    }
+
+    $proc = $null
+    try {
+        $proc = Get-Process -Id $tracked.ProcessId -ErrorAction Stop
+    } catch {
+        Write-Host ('認証ウインドウ PID {0} は既に終了していました。' -f $tracked.ProcessId)
+        return $null
+    }
+
+    if (
+        -not [string]::IsNullOrWhiteSpace($tracked.ProcessName) -and
+        $proc.ProcessName -ne $tracked.ProcessName
+    ) {
+        Write-Host (
+            '認証ウインドウ候補 PID {0} は別プロセスに置き換わっていたため終了しません。現在: {1}' -f
+            $tracked.ProcessId,
+            $proc.ProcessName
+        )
+        return $null
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($tracked.StartedAt)) {
+        try {
+            if ($proc.StartTime.ToString('o') -ne $tracked.StartedAt) {
+                Write-Host ('認証ウインドウ候補 PID {0} は再利用されていたため終了しません。' -f $tracked.ProcessId)
+                return $null
+            }
+        } catch {
+        }
+    }
+
+    Stop-Process -Id $tracked.ProcessId -Force -ErrorAction Stop
+    Write-Host ('タイムアウトのため認証ウインドウ PID {0} ({1}) を終了しました。' -f $tracked.ProcessId, $proc.ProcessName)
+
+    return $tracked.ProcessId
+}
+
 function Wait-And-FindLoginButton {
     param(
         [System.Windows.Automation.AutomationElement]$WindowElement,
+        [int]$MainProcessId,
+        [hashtable]$KnownWindowHandles,
         [int]$TimeoutSeconds = 60
     )
 
@@ -737,7 +994,19 @@ function Wait-And-FindLoginButton {
             return $btn
         }
 
+        Update-TrackedAuthenticationWindow -MainProcessId $MainProcessId -KnownWindowHandles $KnownWindowHandles
         Start-Sleep -Milliseconds 500
+    }
+
+    $trackedPid = $null
+    try {
+        $trackedPid = Stop-TrackedAuthenticationWindow -MainProcessId $MainProcessId
+    } catch {
+        Write-Warning ('認証ウインドウ候補 PID の終了に失敗しました: ' + $_.Exception.Message)
+    }
+
+    if ($trackedPid) {
+        throw ('タイムアウト: ログインボタン (Name=''ログイン'', Button, FrameworkId=''Chrome'') が見つかりませんでした。認証ウインドウ PID ' + $trackedPid + ' を終了しました。')
     }
 
     throw 'タイムアウト: ログインボタン (Name=''ログイン'', Button, FrameworkId=''Chrome'') が見つかりませんでした。'
@@ -756,10 +1025,13 @@ $timeoutSeconds = %d
 $clickWaitSeconds = %d
 
 Write-Host 'KabuS のメインウィンドウを待っています...'
+$knownWindowHandles = Get-TopLevelWindowHandleMap
 $mainWin = Get-KabuSMainWindow -TimeoutSeconds 30
+$mainProcessId = [int]$mainWin.Current.ProcessId
 Write-Host 'メインウィンドウ取得:' $mainWin.Current.Name
+Write-Host ('KabuS PID: ' + $mainProcessId)
 
-$loginButton = Wait-And-FindLoginButton -WindowElement $mainWin -TimeoutSeconds $timeoutSeconds
+$loginButton = Wait-And-FindLoginButton -WindowElement $mainWin -MainProcessId $mainProcessId -KnownWindowHandles $knownWindowHandles -TimeoutSeconds $timeoutSeconds
 
 if ($clickWaitSeconds -gt 0) {
     Write-Host ('ログインボタン押下前に待機しています... ' + $clickWaitSeconds + ' 秒')
